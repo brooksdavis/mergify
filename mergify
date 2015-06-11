@@ -1,0 +1,293 @@
+#!/bin/sh
+#-
+# Copyright (c) 2015 SRI International
+# All rights reserved.
+#
+# This software was developed by SRI International and the University of
+# Cambridge Computer Laboratory under DARPA/AFRL contract FA8750-10-C-0237
+# ("CTSRD"), as part of the DARPA CRASH research programme.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+#
+
+dryrun=0
+
+dotgit=`git rev-parse --show-toplevel`/.git
+if [ ! -d "$dotgit" ]; then
+	err 1 "can't find repo top"
+fi
+mergify_files="MERGIFY_CURRENT_HASH MERGIFY_SAVED_HEAD MERGIFY_LAST_MERGED_HASH MERGIFY_SOURCE_BRANCH MERGIFY_TARGET_BRANCH MERGIFY_PAUSE_PATHS"
+curbranch=`git rev-parse --abbrev-ref HEAD`
+
+usage()
+{
+	echo "usage:"
+	echo "    mergify start [-p <pause-expression>] <branch>"
+	echo "    mergify abort"
+	echo "    mergify continue"
+	echo "    mergify status"
+	exit 1
+}
+
+err()
+{
+	ret=$1
+	shift
+	echo "`basename $0`: $@" 1>&2
+	exit $ret
+}
+
+info()
+{
+	echo "`basename $0`: $@"
+}
+
+warn()
+{
+	echo "`basename $0`: $@" 1>&2
+}
+
+merge_started()
+{
+	for file in $mergify_files; do
+		if [ -e "$dotgit/$file" ]; then
+			return 0
+		fi
+	done
+	return 1
+}
+
+maybe_pause()
+{
+	if [ -n "$pause_paths" ] && git status --porcelain | \
+	    awk '/^[^?][^?]/ { sub(/^.../, ""); sub(/ -> /, "\n"); print }' | \
+	    grep -q -E "$pause_paths"; then
+		info "pausing due to path match"
+		exit 1
+	fi
+}
+
+command="$1"
+shift
+case "$command" in
+abort)
+	if ! merge_started; then
+		warn "no merge to abort"
+		exit 1
+	fi
+	$0 status
+
+	savedhead=`cat "$dotgit/MERGIFY_SAVED_HEAD"`
+	curhead=`git rev-parse HEAD`
+	tgtbranch=`cat "$dotgit/MERGIFY_TARGET_BRANCH"`
+	if [ "$curbranch" = "$tgtbranch" ]; then
+		if [ -e "$dotgit/MERGE_HEAD" ]; then
+			info "Merge in progress, aborting"
+			if ! git merge --abort; then
+				warn "Failed to abort merge"
+			fi
+		fi
+	fi
+	if [ "$savedhead" != "$curhead" ]; then
+		if [ "$curbranch" = "$tgtbranch" ]; then
+			echo
+			echo "you may wish to run: git reset --hard $savedhead"
+		elif git show-ref --verify --quiet refs/heads/$tgtbranch; then
+			echo "you may wish to reset $tgtbranch to $savedhead"
+		fi
+	fi
+	for file in $mergify_files; do
+		rm -f "$dotgit/$file"
+	done
+	exit 0
+	;;
+continue)
+	if ! merge_started; then
+		warn "no merge to continue"
+		exit 1
+	fi
+	srcbranch=`cat "$dotgit/MERGIFY_SOURCE_BRANCH"`
+	tgtbranch=`cat "$dotgit/MERGIFY_TARGET_BRANCH"`
+	if [ -e "$dotgit/MERGIFY_PAUSE_PATHS" ]; then
+		pause_paths=`cat "$dotgit/MERGIFY_PAUSE_PATHS"`
+	fi
+	if [ "$tgtbranch" != "$curbranch" ]; then
+		err 1 "not on target branch: $tgtbranch"
+	fi
+	lasthash=`cat "$dotgit/MERGIFY_LAST_MERGED_HASH"`
+	curhash=`cat "$dotgit/MERGIFY_CURRENT_HASH"`
+	info "resuming merge at $curhash"
+	if [ -e "$dotgit/MERGE_HEAD" ]; then
+		info "Found an in-progress merge, trying to commit"
+		if ! git commit --reuse-message=$curhash; then
+			warn "git commit failed, resolve and 'continue'"
+			exit 1
+		fi
+	fi
+	if [ -e "$dotgit/MERGE_HEAD" ]; then
+		err 2 "internal error, in-progress merge not completed!"
+	fi
+	mv -f "$dotgit/MERGIFY_CURRENT_HASH" "$dotgit/MERGIFY_LAST_MERGED_HASH"
+	lasthash=$curhash
+	;;
+skip)
+	# XXX: probably not needed now that we're using --first-parent
+	# so undocumented.
+	if ! merge_started; then
+		warn "no merge to continue"
+		exit 1
+	fi
+	if [ ! -e "$dotgit/MERGIFY_CURRENT_HASH" ]; then
+		warn "no current commit to skip"
+		exit 1
+	fi
+	srcbranch=`cat "$dotgit/MERGIFY_SOURCE_BRANCH"`
+	tgtbranch=`cat "$dotgit/MERGIFY_TARGET_BRANCH"`
+	if [ -e "$dotgit/MERGIFY_PAUSE_PATHS" ]; then
+		pause_paths=`cat "$dotgit/MERGIFY_PAUSE_PATHS"`
+	fi
+	if [ "$tgtbranch" != "$curbranch" ]; then
+		err 1 "not on target branch: $tgtbranch"
+	fi
+	curhash=`cat "$dotgit/MERGIFY_CURRENT_HASH"`
+	if [ -e "$dotgit/MERGE_HEAD" ]; then
+		info "Merge in progress, aborting"
+		if ! git merge --abort; then
+			err 1 "Failed to abort merge"
+		fi
+	fi
+	if [ -e "$dotgit/MERGE_HEAD" ]; then
+		err 2 "internal error: merge still in progress"
+	fi
+	mv -f "$dotgit/MERGIFY_CURRENT_HASH" "$dotgit/MERGIFY_LAST_MERGED_HASH"
+	lasthash=$curhash
+	;;
+start)
+	if merge_started; then
+		warn "merge in progress, you must 'abort' or 'continue'"
+		usage
+	fi
+	while getopts "p:" _opt; do
+		case "$_opt" in
+		p)
+			pause_paths="$OPTARG"
+			;;
+		*)
+			warn "unknown arg $_opt"
+			usage
+			;;
+		esac
+	done
+	shift $(($OPTIND - 1))
+	srcbranch=$1
+	if ! git rev-parse --verify --quiet $srcbranch > /dev/null; then
+		err 1 "'${srcbranch}' is not a valid branch"
+	fi
+	lasthash=`git merge-base HEAD $srcbranch`
+	if [ -z "$lasthash" ]; then
+		err 1 "failed to find a merge-base"
+	fi
+	echo $srcbranch > "$dotgit/MERGIFY_SOURCE_BRANCH"
+	echo $curbranch > "$dotgit/MERGIFY_TARGET_BRANCH"
+	echo $lasthash > "$dotgit/MERGIFY_LAST_MERGED_HASH"
+	if [ -n "$pause_paths" ]; then
+		echo "$pause_paths" > "$dotgit/MERGIFY_PAUSE_PATHS"
+	fi
+	git rev-parse HEAD > "$dotgit/MERGIFY_SAVED_HEAD"
+	;;
+status)
+	if ! merge_started; then
+		info "no merge in progress"
+		exit 0
+	fi
+	if [ -e "$dotgit/MERGIFY_SOURCE_BRANCH" ]; then
+		srcbranch=`cat "$dotgit/MERGIFY_SOURCE_BRANCH"`
+		echo "merging from $srcbranch"
+	fi
+	if [ -e "$dotgit/MERGIFY_TARGET_BRANCH" ]; then
+		tgtbranch=`cat "$dotgit/MERGIFY_TARGET_BRANCH"`
+		echo "merging to $tgtbranch"
+		if [ "$tgtbranch" != "$curbranch" ]; then
+			warn "not on target branch!"
+		fi
+	fi
+	if [ -e "$dotgit/MERGIFY_LAST_MERGED_HASH" ]; then
+		lasthash=`cat "$dotgit/MERGIFY_LAST_MERGED_HASH"`
+		echo "merged through $lasthash"
+	fi
+	if [ -e "$dotgit/MERGIFY_CURRENT_HASH" ]; then
+		curhash=`cat "$dotgit/MERGIFY_CURRENT_HASH"`
+		echo "currently merging $curhash"
+	fi
+	if [ -e "$dotgit/MERGIFY_SAVED_HEAD" ]; then
+		origionalhas=`cat "$dotgit/MERGIFY_SAVED_HEAD"`
+		echo "merge started at $origionalhas"
+	fi
+	exit 0
+	;;
+'')
+	warn "No command provided"
+	usage
+	;;
+*)
+	warn "Unknown command: $command"
+	usage
+	;;
+esac
+
+#hashes=`git log --pretty=format:%H --reverse ${lasthash}~1..${srcbranch} | \
+#    awk -v lasthash=${lasthash} 'BEGIN {found=0} \
+#	{ if (found == 1) { print $1 } else { if ($1 == lasthash) found = 1; } }'`
+hashes=`git log --pretty=format:%H --reverse --first-parent ${lasthash}..${srcbranch}`
+for curhash in $hashes; do
+	info "attemping to merge $curhash"
+	git show --pretty=oneline --no-patch $curhash
+	echo $curhash > "$dotgit/MERGIFY_CURRENT_HASH"
+	if [ $dryrun -eq 0 ]; then
+		if ! git merge --no-commit $curhash; then
+			warn "automerge of $curhash unsuccessful"
+			warn "resolve conflicts and 'continue', or 'abort'"
+			exit 1
+		fi
+		maybe_pause
+		if ! git commit --reuse-message=$curhash; then
+			warn "commit failed, fix and 'continue', or 'abort'"
+			exit 1
+		fi
+	fi
+	mv -f "$dotgit/MERGIFY_CURRENT_HASH" "$dotgit/MERGIFY_LAST_MERGED_HASH"
+	lasthash=$curhash
+done
+
+srcbranchhash=`git rev-parse "${srcbranch}~0"`
+if [ "$lasthash" != "$srcbranchhash" ]; then
+	err 2 "internal error: reached last hash, but not at $srcbranch"
+fi
+if [ -e "$dotgit/MERGIFY_CURRENT_HASH" ]; then
+	err 2 "internal error: reached last hash, but still merging!"
+fi
+
+for file in $mergify_files; do
+	rm -f "$dotgit/$file"
+done
+echo
+info "merge of $srcbranch complete"

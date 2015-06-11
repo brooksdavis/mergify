@@ -35,13 +35,13 @@ dotgit=`git rev-parse --show-toplevel`/.git
 if [ ! -d "$dotgit" ]; then
 	err 1 "can't find repo top"
 fi
-mergify_files="MERGIFY_CURRENT_HASH MERGIFY_SAVED_HEAD MERGIFY_LAST_MERGED_HASH MERGIFY_SOURCE_BRANCH MERGIFY_TARGET_BRANCH MERGIFY_PAUSE_PATHS"
+mergify_files="MERGIFY_CURRENT_HASH MERGIFY_SAVED_HEAD MERGIFY_LAST_MERGED_HASH MERGIFY_SOURCE_BRANCH MERGIFY_TARGET_BRANCH MERGIFY_PAUSE_HASHES MERGIFY_PAUSE_PATHS"
 curbranch=`git rev-parse --abbrev-ref HEAD`
 
 usage()
 {
 	echo "usage:"
-	echo "    mergify start [-p <pause-expression>] <branch>"
+	echo "    mergify start [-c hashes] [-p <pause-expression>] <branch>"
 	echo "    mergify abort"
 	echo "    mergify continue"
 	echo "    mergify status"
@@ -78,6 +78,14 @@ merge_started()
 
 maybe_pause()
 {
+	if [ -n "$pause_hashes" ]; then
+		for phash in $pause_hashes; do
+			if [ $phash = $curhash ]; then
+				info "pausing at $curhash"
+				exit 1
+			fi
+		done
+	fi
 	if [ -n "$pause_paths" ] && git status --porcelain | \
 	    awk '/^[^?][^?]/ { sub(/^.../, ""); sub(/ -> /, "\n"); print }' | \
 	    grep -q -E "$pause_paths"; then
@@ -127,6 +135,9 @@ continue)
 	fi
 	srcbranch=`cat "$dotgit/MERGIFY_SOURCE_BRANCH"`
 	tgtbranch=`cat "$dotgit/MERGIFY_TARGET_BRANCH"`
+	if [ -e "$dotgit/MERGIFY_PAUSE_HASHES" ]; then
+		pause_hashes=`cat "$dotgit/MERGIFY_PAUSE_HASHES"`
+	fi
 	if [ -e "$dotgit/MERGIFY_PAUSE_PATHS" ]; then
 		pause_paths=`cat "$dotgit/MERGIFY_PAUSE_PATHS"`
 	fi
@@ -186,8 +197,11 @@ start)
 		warn "merge in progress, you must 'abort' or 'continue'"
 		usage
 	fi
-	while getopts "p:" _opt; do
+	while getopts "c:p:" _opt; do
 		case "$_opt" in
+		c)
+			pause_hashes="$OPTARG"
+			;;
 		p)
 			pause_paths="$OPTARG"
 			;;
@@ -209,6 +223,9 @@ start)
 	echo $srcbranch > "$dotgit/MERGIFY_SOURCE_BRANCH"
 	echo $curbranch > "$dotgit/MERGIFY_TARGET_BRANCH"
 	echo $lasthash > "$dotgit/MERGIFY_LAST_MERGED_HASH"
+	if [ -n "$pause_hashes" ]; then
+		echo "$pause_hashes" > "$dotgit/MERGIFY_PAUSE_HASHES"
+	fi
 	if [ -n "$pause_paths" ]; then
 		echo "$pause_paths" > "$dotgit/MERGIFY_PAUSE_PATHS"
 	fi

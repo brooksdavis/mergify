@@ -5,7 +5,7 @@ is most useful when merging changes to a highly diverged fork of a project.
 
 ```
 usage:
-    mergify start [-p <pause-expression>] <branch>
+    mergify start [<options>] <branch>
     mergify abort
     mergify continue
     mergify status
@@ -18,9 +18,18 @@ usage:
 	common parent will be merged one change at a time.  If merge
 	fails, mergify exits to allow the user to correct the merge.
 
-	pause-expression is a regular expression that matches modified paths.
-	When it matches, mergify stops before committing the merged change
-	even if no conflict occurs.
+	Options:
+
+	-c <list-of-hashes>
+
+	Stop when any of the hashes in the space-separated list of hashes has
+	been merged.
+
+	-p <pause-expression>
+
+	Paths to files modified by the commit are matched against the
+	expression.  If it matches, mergify stops before committing the merged
+	commit.
 
  * abort
 

@@ -41,9 +41,11 @@ curbranch=`git rev-parse --abbrev-ref HEAD`
 usage()
 {
 	echo "usage:"
-	echo "    mergify start [-c hashes] [-p <pause-expression>] <branch>"
+	echo "    mergify start [-c hashes] [-p <pause-expression>] [-s] <branch>"
 	echo "    mergify abort"
-	echo "    mergify continue"
+	echo "    mergify commit"
+	echo "    mergify continue [-s]"
+	echo "    mergify show"
 	echo "    mergify status"
 	exit 1
 }
@@ -78,6 +80,10 @@ merge_started()
 
 maybe_pause()
 {
+	if [ -n "$single_step" ]; then
+		info "single step"
+		exit 1
+	fi
 	if [ -n "$pause_hashes" ]; then
 		for phash in $pause_hashes; do
 			if [ $phash = $curhash ]; then
@@ -128,11 +134,26 @@ abort)
 	done
 	exit 0
 	;;
-continue)
+commit|continue)
 	if ! merge_started; then
 		warn "no merge to continue"
 		exit 1
 	fi
+	while getopts "s" _opt; do
+		case "$_opt" in
+		s)
+			if [ "$command" != "continue" ]; then
+				warn "invalid arg $_opt"
+				usage
+			fi
+			single_step=1
+			;;
+		*)
+			warn "unknown arg $_opt"
+			usage
+			;;
+		esac
+	done
 	srcbranch=`cat "$dotgit/MERGIFY_SOURCE_BRANCH"`
 	tgtbranch=`cat "$dotgit/MERGIFY_TARGET_BRANCH"`
 	if [ -e "$dotgit/MERGIFY_PAUSE_HASHES" ]; then
@@ -146,7 +167,9 @@ continue)
 	fi
 	lasthash=`cat "$dotgit/MERGIFY_LAST_MERGED_HASH"`
 	curhash=`cat "$dotgit/MERGIFY_CURRENT_HASH"`
-	info "resuming merge at $curhash"
+	if [ "$command" = "continue" ]; then
+		info "resuming merge at $curhash"
+	fi
 	if [ -e "$dotgit/MERGE_HEAD" ]; then
 		info "Found an in-progress merge, trying to commit"
 		if ! git commit --reuse-message=$curhash; then
@@ -158,7 +181,22 @@ continue)
 		err 2 "internal error, in-progress merge not completed!"
 	fi
 	mv -f "$dotgit/MERGIFY_CURRENT_HASH" "$dotgit/MERGIFY_LAST_MERGED_HASH"
+	if [ "$command" = "commit" ]; then
+		info "commit of $curhash succeeded"
+		exit 0
+	fi
 	lasthash=$curhash
+	;;
+show)
+	if ! merge_started; then
+		err 1 "no merge in progress so nothing to show"
+	fi
+	if [ ! -e "$dotgit/MERGIFY_CURRENT_HASH" ]; then
+		err 1 "no pending commit so nothing to show"
+	fi
+	curhash=`cat "$dotgit/MERGIFY_CURRENT_HASH"`
+	git show $curhash
+	exit 0
 	;;
 skip)
 	# XXX: probably not needed now that we're using --first-parent
@@ -197,13 +235,16 @@ start)
 		warn "merge in progress, you must 'abort' or 'continue'"
 		usage
 	fi
-	while getopts "c:p:" _opt; do
+	while getopts "c:p:s" _opt; do
 		case "$_opt" in
 		c)
 			pause_hashes="$OPTARG"
 			;;
 		p)
 			pause_paths="$OPTARG"
+			;;
+		s)
+			single_step=1
 			;;
 		*)
 			warn "unknown arg $_opt"

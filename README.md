@@ -7,7 +7,9 @@ is most useful when merging changes to a highly diverged fork of a project.
 usage:
     mergify start [<options>] <branch>
     mergify abort
+    mergify commit
     mergify continue
+    mergify show
     mergify status
 ```
 
@@ -31,14 +33,26 @@ usage:
 	expression.  If it matches, mergify stops before committing the merged
 	commit.
 
+	-s
+
+	Begin the merge, but end after the first commit.
+
  * abort
 
 	Abandon the current merge process.  Previously merged changes are not
         reverted, but a revision is provided as a target for git reset.
 
+ * commit
+
+	Commit the resolved change and exit.
+
  * continue
 
 	Commit the resolved change and continue the merging process.
+
+ * show
+
+	Show the contents of the commit being merged.
 
  * status
 

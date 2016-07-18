@@ -39,7 +39,7 @@ err()
 	exit $ret
 }
 
-dotgit=`git rev-parse --show-toplevel`/.git
+dotgit=`git rev-parse --git-dir`
 if [ ! -d "$dotgit" ]; then
 	err 1 "can't find repo top"
 fi

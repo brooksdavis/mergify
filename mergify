@@ -31,7 +31,15 @@
 
 dryrun=0
 
-dotgit=`git rev-parse --show-toplevel`/.git
+err()
+{
+	ret=$1
+	shift
+	echo "`basename $0`: $@" 1>&2
+	exit $ret
+}
+
+dotgit=`git rev-parse --git-dir`
 if [ ! -d "$dotgit" ]; then
 	err 1 "can't find repo top"
 fi
@@ -48,14 +56,6 @@ usage()
 	echo "    mergify show"
 	echo "    mergify status"
 	exit 1
-}
-
-err()
-{
-	ret=$1
-	shift
-	echo "`basename $0`: $@" 1>&2
-	exit $ret
 }
 
 info()

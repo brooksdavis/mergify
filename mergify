@@ -30,12 +30,13 @@
 #
 
 dryrun=0
+mypath=`basename $0`
 
 err()
 {
 	ret=$1
 	shift
-	echo "`basename $0`: $@" 1>&2
+	echo "$mypath: $@" 1>&2
 	exit $ret
 }
 
@@ -60,12 +61,12 @@ usage()
 
 info()
 {
-	echo "`basename $0`: $@"
+	echo "$mypath: $@"
 }
 
 warn()
 {
-	echo "`basename $0`: $@" 1>&2
+	echo "$mypath: $@" 1>&2
 }
 
 merge_started()

@@ -30,12 +30,13 @@
 #
 
 dryrun=0
+mypath=`basename $0`
 
 err()
 {
 	ret=$1
 	shift
-	echo "`basename $0`: $@" 1>&2
+	echo "$mypath: $@" 1>&2
 	exit $ret
 }
 
@@ -60,12 +61,12 @@ usage()
 
 info()
 {
-	echo "`basename $0`: $@"
+	echo "$mypath: $@"
 }
 
 warn()
 {
-	echo "`basename $0`: $@" 1>&2
+	echo "$mypath: $@" 1>&2
 }
 
 merge_started()
@@ -324,6 +325,13 @@ for curhash in $hashes; do
 		if ! git merge --no-commit $curhash; then
 			warn "automerge of $curhash unsuccessful"
 			warn "resolve conflicts and 'continue', or 'abort'"
+			# Tell them how to fix 'git commit'
+			cat > $dotgit/MERGE_MSG <<-EOF
+			#
+			# The proper way to commit is with '$mypath continue' or '$mypath commit'.
+			# Exit this and use one of those instead.
+			#
+			EOF
 			exit 1
 		fi
 		maybe_pause

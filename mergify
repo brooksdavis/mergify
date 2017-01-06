@@ -41,6 +41,7 @@ err()
 }
 
 dotgit=`git rev-parse --git-dir`
+toplevel=`git rev-parse --show-toplevel`
 if [ ! -d "$dotgit" ]; then
 	err 1 "can't find repo top"
 fi
@@ -236,12 +237,19 @@ start)
 		warn "merge in progress, you must 'abort' or 'continue'"
 		usage
 	fi
+	if [ -e "$toplevel/.mergify_pause_paths" ]; then
+		info "loading pause paths from $toplevel/.mergify_pause_paths"
+		pause_paths=`cat "$toplevel/.mergify_pause_paths"`
+	fi
 	while getopts "c:p:s" _opt; do
 		case "$_opt" in
 		c)
 			pause_hashes="$OPTARG"
 			;;
 		p)
+			if [ -n "$pause_paths" ]; then
+				warn "Overriding previously set pause paths"
+			fi
 			pause_paths="$OPTARG"
 			;;
 		s)

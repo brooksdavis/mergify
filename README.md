@@ -7,6 +7,7 @@ is most useful when merging changes to a highly diverged fork of a project.
 usage:
     mergify start [<options>] <branch>
     mergify abort
+    mergify autoadd
     mergify commit
     mergify continue
     mergify show
@@ -41,6 +42,13 @@ usage:
 
 	Abandon the current merge process.  Previously merged changes are not
         reverted, but a revision is provided as a target for git reset.
+
+ * autoadd
+
+	Add changed files that do not contain conflict markers.
+
+	Also delete files that were deleted from this tree in a prior commit
+	and changed upstream.
 
  * commit
 

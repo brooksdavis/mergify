@@ -53,6 +53,7 @@ usage()
 	echo "usage:"
 	echo "    mergify start [-c hashes] [-p <pause-expression>] [-s] <branch>"
 	echo "    mergify abort"
+	echo "    mergify autoadd"
 	echo "    mergify commit"
 	echo "    mergify continue [-s]"
 	echo "    mergify show"
@@ -133,6 +134,33 @@ abort)
 	fi
 	for file in $mergify_files; do
 		rm -f "$dotgit/$file"
+	done
+	exit 0
+	;;
+autoadd)
+	git status --porcelain=v1 | while IFS='' read -r line; do
+		status="${line%% [^ ]*}"
+		file="${line#?? }"
+		case "$status" in
+		DU)
+			info "deleting $file (previously deleted by us)"
+			git rm "$file"
+			;;
+		UU|MM)
+			if grep -qE '^(<<<<<<< HEAD|=======|>>>>>>> [0-9a-f]*)$' "$file"; then
+				warn "$file contains conflict markers, skipping"
+				continue
+			fi
+			info "adding $file"
+			git add "$file"
+			;;
+		'M '|'??')
+			# do nothing
+			;;
+		*)
+			warn "doing nothing to '$file' (status '$status')"
+			;;
+		esac
 	done
 	exit 0
 	;;

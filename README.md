@@ -54,6 +54,9 @@ usage:
 
 	Commit the resolved change and exit.
 
+	Intended to be used when the local tree needs further adaptation
+	after the current change is merged.
+
  * continue
 
 	Commit the resolved change and continue the merging process.

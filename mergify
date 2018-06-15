@@ -147,6 +147,10 @@ autoadd)
 		status="${line%% [^ ]*}"
 		file="${line#?? }"
 		case "$status" in
+		UD)
+			info "deleting $file (deleted by them)"
+			git rm "$file"
+			;;
 		DU)
 			info "deleting $file (previously deleted by us)"
 			git rm "$file"

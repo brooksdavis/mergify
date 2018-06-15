@@ -163,7 +163,7 @@ autoadd)
 			info "adding $file"
 			git add "$file"
 			;;
-		'M '|'??')
+		'A '|'D '|'M '|'R '|'??')
 			# do nothing
 			;;
 		*)

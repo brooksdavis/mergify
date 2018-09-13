@@ -10,6 +10,7 @@ usage:
     mergify autoadd
     mergify commit
     mergify continue
+    mergify skip
     mergify show
     mergify status
 ```
@@ -64,6 +65,16 @@ usage:
  * show
 
 	Show the contents of the commit being merged.
+
+ * skip
+
+	Restore the tree to the previous state and commit the merge.
+	This makes makes the merge commit a no-op.
+
+	This is useful when a change conflicts badly and as later
+	reverted or if it is one of several commits toward the state in
+	the current tree (e.g. when local changes are upstreamed in
+	multiple commits.)
 
  * status
 

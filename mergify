@@ -62,6 +62,7 @@ usage()
 	echo "    mergify commit"
 	echo "    mergify continue [-s]"
 	echo "    mergify show"
+	echo "    mergify skip"
 	echo "    mergify status"
 	exit 1
 }
@@ -238,16 +239,23 @@ show)
 	exit 0
 	;;
 skip)
-	# XXX: probably not needed now that we're using --first-parent
-	# so undocumented.
 	if ! merge_started; then
-		warn "no merge to continue"
-		exit 1
+		err 1 "no merge in progress"
 	fi
 	if [ ! -e "$dotgit/MERGIFY_CURRENT_HASH" ]; then
-		warn "no current commit to skip"
-		exit 1
+		err 1 "no current commit to skip"
 	fi
+	while getopts "s" _opt; do
+		case "$_opt" in
+		s)
+			single_step=1
+			;;
+		*)
+			warn "unknown arg $_opt"
+			usage
+			;;
+		esac
+	done
 	srcbranch=`cat "$dotgit/MERGIFY_SOURCE_BRANCH"`
 	tgtbranch=`cat "$dotgit/MERGIFY_TARGET_BRANCH"`
 	if [ -e "$dotgit/MERGIFY_PAUSE_PATHS" ]; then
@@ -257,11 +265,31 @@ skip)
 		err 1 "not on target branch: $tgtbranch"
 	fi
 	curhash=`cat "$dotgit/MERGIFY_CURRENT_HASH"`
-	if [ -e "$dotgit/MERGE_HEAD" ]; then
-		info "Merge in progress, aborting"
-		if ! git merge --abort; then
-			err 1 "Failed to abort merge"
-		fi
+	unhandled=0
+	git status --porcelain=v1 | while IFS='' read -r line; do
+		status="${line%% [^ ]*}"
+		file="${line#?? }"
+		case "$status" in
+		AA|MM|'M '|UU)
+			info "Restoring $file to HEAD"
+			git show "HEAD:$file" > "$file"
+			git add "$file"
+			;;
+		'??')
+			# Ignore stray files
+			;;
+		*)
+			unhandled=$(($unhandled + 1))
+			warn "doing nothing to '$file' (status '$status')"
+			;;
+		esac
+	done
+	if [ $unhandled -ne 0 ]; then
+		err 1 "$unhandled unhandled files, not attemping to commit"
+	fi
+	if ! git commit --reuse-message=$curhash; then
+		warn "git commit failed, resolve and 'continue'"
+		exit 1
 	fi
 	if [ -e "$dotgit/MERGE_HEAD" ]; then
 		err 2 "internal error: merge still in progress"

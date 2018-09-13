@@ -155,7 +155,7 @@ autoadd)
 			info "deleting $file (previously deleted by us)"
 			git rm "$file"
 			;;
-		UU|MM)
+		AA|MM|UU)
 			if grep -qE '^(<<<<<<< HEAD|=======|>>>>>>> [0-9a-f]*)$' "$file"; then
 				warn "$file contains conflict markers, skipping"
 				continue
@@ -163,7 +163,7 @@ autoadd)
 			info "adding $file"
 			git add "$file"
 			;;
-		'A '|'D '|'M '|'R '|'??')
+		'A '|'C '|'D '|'M '|'R '|'??')
 			# do nothing
 			;;
 		*)

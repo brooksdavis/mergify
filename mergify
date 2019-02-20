@@ -392,7 +392,7 @@ esac
 hashes=`git log --pretty=format:%H --reverse --first-parent ${lasthash}..${srcbranch}`
 for curhash in $hashes; do
 	info "attemping to merge $curhash"
-	git show --pretty=oneline --no-patch $curhash
+	git --no-pager show --pretty=oneline --no-patch $curhash
 	echo $curhash > "$dotgit/MERGIFY_CURRENT_HASH"
 	if [ $dryrun -eq 0 ]; then
 		if ! git merge --no-commit $curhash; then

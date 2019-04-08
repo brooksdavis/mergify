@@ -354,6 +354,7 @@ status)
 	if [ -e "$dotgit/MERGIFY_SOURCE_BRANCH" ]; then
 		srcbranch=`cat "$dotgit/MERGIFY_SOURCE_BRANCH"`
 		echo "merging from $srcbranch"
+		echo "currently $(git rev-list --count "HEAD..$srcbranch") commits behind $srcbranch"
 	fi
 	if [ -e "$dotgit/MERGIFY_TARGET_BRANCH" ]; then
 		tgtbranch=`cat "$dotgit/MERGIFY_TARGET_BRANCH"`
@@ -398,6 +399,7 @@ for curhash in $hashes; do
 		if ! git merge --no-commit $curhash; then
 			warn "automerge of $curhash unsuccessful"
 			warn "resolve conflicts and 'continue', or 'abort'"
+			info "currently $(git rev-list --count "HEAD..$srcbranch") commits behind $srcbranch"
 			# Tell them how to fix 'git commit'
 			cat > $dotgit/MERGE_MSG <<-EOF
 			#
@@ -410,6 +412,7 @@ for curhash in $hashes; do
 		maybe_pause
 		if ! git commit --reuse-message=$curhash; then
 			warn "commit failed, fix and 'continue', or 'abort'"
+			info "currently $(git rev-list --count "HEAD..$srcbranch") commits behind $srcbranch"
 			exit 1
 		fi
 	fi

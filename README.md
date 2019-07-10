@@ -10,6 +10,7 @@ usage:
     mergify autoadd
     mergify commit
     mergify continue
+    mergify resolve
     mergify skip
     mergify show
     mergify status
@@ -62,6 +63,12 @@ usage:
 
 	Commit the resolved change and continue the merging process.
 
+ * resolve
+
+	Open each file requiring resolution in `${EDITOR}` in turn.
+
+	**This interface is lousy and will likey be replaced with
+	Subversion style interactive prompts in later revisions.**
  * show
 
 	Show the contents of the commit being merged.

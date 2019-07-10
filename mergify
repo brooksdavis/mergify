@@ -36,6 +36,16 @@
 
 dryrun=0
 mypath=`basename $0`
+tmpfile=
+
+on_exit()
+{
+	if [ -n "$tmpfile" ]; then
+		rm -f $tmpfile
+	fi
+}
+
+trap on_exit EXIT
 
 err()
 {
@@ -61,6 +71,7 @@ usage()
 	echo "    mergify autoadd"
 	echo "    mergify commit"
 	echo "    mergify continue [-s]"
+	echo "    mergify resolve"
 	echo "    mergify show"
 	echo "    mergify skip"
 	echo "    mergify status"
@@ -226,6 +237,33 @@ commit|continue)
 		exit 0
 	fi
 	lasthash=$curhash
+	;;
+resolve)
+	tmpfile=`mktemp -t mergify`
+	git status --porcelain=v1 | while IFS='' read -r line; do
+		status="${line%% [^ ]*}"
+		file="${line#?? }"
+		case "$status" in
+		AA|MM|UU)
+			if ! grep -qE '^(<<<<<<< HEAD|=======|>>>>>>> [0-9a-f]*)$' "$file"; then
+				warn "$file does not contain conflict markers, skipping"
+				continue
+			fi
+			info "adding $file to edit list"
+			echo "$file" >> "$tmpfile"
+			;;
+		'A '|'C '|'D '|'M '|'R '|'??'|'UD'|'DU')
+			# do nothing
+			;;
+		*)
+			warn "doing nothing to '$file' (status '$status')"
+			;;
+		esac
+	done
+	for file in $(cat "$tmpfile"); do
+		${EDITOR:-vi} "$file"
+	done
+	exit 0
 	;;
 show)
 	if ! merge_started; then
